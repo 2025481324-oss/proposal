@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A Special Message for You</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>A Special Message</title>
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@500&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
@@ -14,70 +14,23 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background-color: #ffe4e1; /* Misty Rose */
+            background-color: #ffe4e1;
             font-family: 'Quicksand', sans-serif;
             overflow: hidden;
             text-align: center;
+            touch-action: none; /* Prevents zooming/scrolling on mobile */
         }
-
-        h1 {
-            font-family: 'Dancing Script', cursive;
-            font-size: 3rem;
-            color: #d02090;
-            margin-bottom: 20px;
-            padding: 0 20px;
-        }
-
-        .container {
-            position: relative;
-            width: 100%;
-            max-width: 400px;
-            height: 200px;
-        }
-
-        button {
-            padding: 15px 35px;
-            font-size: 1.2rem;
-            border: none;
-            border-radius: 50px;
-            cursor: pointer;
-            transition: transform 0.2s;
-            position: absolute;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-
-        #yesBtn {
-            background-color: #ff69b4;
-            color: white;
-            left: 50%;
-            transform: translateX(-110%);
-        }
-
-        #noBtn {
-            background-color: #ffffff;
-            color: #ff69b4;
-            left: 50%;
-            transform: translateX(10%);
-        }
-
-        #message {
-            display: none;
-            margin-top: 20px;
-            font-size: 1.5rem;
-            color: #d02090;
-            font-weight: bold;
-            animation: fadeIn 1s;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
+        h1 { font-family: 'Dancing Script', cursive; font-size: 2.5rem; color: #d02090; padding: 20px; }
+        .container { position: relative; width: 100%; height: 300px; }
+        button { padding: 15px 30px; font-size: 1.2rem; border: none; border-radius: 50px; cursor: pointer; position: absolute; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        #yesBtn { background-color: #ff69b4; color: white; left: 50%; transform: translateX(-110%); z-index: 10; }
+        #noBtn { background-color: #ffffff; color: #ff69b4; left: 50%; transform: translateX(10%); transition: 0.1s; }
+        #message { display: none; font-size: 1.5rem; color: #d02090; font-weight: bold; margin-top: 20px; }
     </style>
 </head>
-<body>
+<body onclick="enableFullScreen()">
 
-    <h1 id="question">Will you be my girlfriend? ❤️</h1>
+    <h1 id="question">Will you be my girlfriend? ❤️<br><small style="font-size: 0.5em;">(There is no escape!)</small></h1>
 
     <div class="container">
         <button id="yesBtn" onclick="celebrate()">Yes</button>
@@ -87,49 +40,45 @@
     <div id="message">I knew you'd say yes! Best. Day. Ever. 🌹</div>
 
     <script>
+        // 1. THE TRAP: Pop-up if they try to close the tab
+        window.onbeforeunload = function() {
+            return "You haven't answered yet!";
+        };
+
+        // 2. FULLSCREEN: Triggered when she first taps the screen
+        function enableFullScreen() {
+            let doc = window.document;
+            let docEl = doc.documentElement;
+            let requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+            if (!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
+                requestFullScreen.call(docEl);
+            }
+        }
+
         function moveButton() {
             const noBtn = document.getElementById('noBtn');
-            // Calculate random positions within the screen bounds
             const x = Math.random() * (window.innerWidth - noBtn.offsetWidth);
             const y = Math.random() * (window.innerHeight - noBtn.offsetHeight);
-            
             noBtn.style.position = 'fixed';
             noBtn.style.left = x + 'px';
             noBtn.style.top = y + 'px';
         }
 
         function celebrate() {
-            // Hide the question and buttons
-            document.getElementById('question').innerText = "Yay! ❤️";
+            // Remove the trap so she can actually close the tab once she says yes!
+            window.onbeforeunload = null;
+
+            document.getElementById('question').innerHTML = "Official Girlfriend! ❤️";
             document.getElementById('noBtn').style.display = 'none';
             document.getElementById('yesBtn').style.display = 'none';
-            
-            // Show the success message
             document.getElementById('message').style.display = 'block';
 
-            // Launch Confetti!
-            var duration = 5 * 1000;
+            var duration = 10 * 1000;
             var end = Date.now() + duration;
-
             (function frame() {
-              confetti({
-                particleCount: 3,
-                angle: 60,
-                spread: 55,
-                origin: { x: 0 },
-                colors: ['#ff69b4', '#ff1493', '#ffffff']
-              });
-              confetti({
-                particleCount: 3,
-                angle: 120,
-                spread: 55,
-                origin: { x: 1 },
-                colors: ['#ff69b4', '#ff1493', '#ffffff']
-              });
-
-              if (Date.now() < end) {
-                requestAnimationFrame(frame);
-              }
+                confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff69b4', '#ffffff'] });
+                confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff69b4', '#ffffff'] });
+                if (Date.now() < end) requestAnimationFrame(frame);
             }());
         }
     </script>
