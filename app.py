@@ -10,7 +10,7 @@ from datetime import datetime
 # SECTION 1: SYSTEM CONFIGURATION & UI THEMING
 # =================================================================
 st.set_page_config(
-    page_title="MathIsEZ Ultra | MVVM Edition",
+    page_title="MathIsEZ",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
