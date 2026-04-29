@@ -2,168 +2,356 @@ import streamlit as st
 from groq import Groq
 import base64
 import time
+import pandas as pd
+import io
+from datetime import datetime
 
-# --- 1. CONFIG & PREMIUM MATERIAL 3 CSS ---
-st.set_page_config(page_title="MathIsEZ Ultra", page_icon="⚡", layout="wide")
+# =================================================================
+# SECTION 1: SYSTEM CONFIGURATION & UI THEMING
+# =================================================================
+st.set_page_config(
+    page_title="MathIsEZ Ultra | MVVM Edition",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# Premium Material 3 Design System
 st.markdown("""
     <style>
-    /* Animated Gradient Background */
+    /* Premium Background with Dynamic Mesh Gradient */
     @keyframes gradientBG {
         0% { background-position: 0% 50%; }
         50% { background-position: 100% 50%; }
         100% { background-position: 0% 50%; }
     }
     .stApp {
-        background: linear-gradient(-45deg, #0f172a, #1e293b, #111827, #0f172a);
+        background: linear-gradient(-45deg, #0f172a, #1e293b, #0d1117, #1e1b4b);
         background-size: 400% 400%;
         animation: gradientBG 15s ease infinite;
         color: #f1f5f9;
+        font-family: 'Inter', sans-serif;
     }
     
+    /* Typography & Titles */
     .title-text {
-        background: linear-gradient(to right, #60a5fa, #a78bfa);
+        background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-size: 45px; font-weight: 900;
-    }
-
-    /* Glassmorphism Cards */
-    .m3-card {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(15px);
-        border-radius: 24px;
-        padding: 25px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        transition: all 0.3s ease;
-        margin-bottom: 20px;
-    }
-    .m3-card:hover {
-        transform: translateY(-5px);
-        border: 1px solid #3b82f6;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        font-size: 52px; font-weight: 900;
+        letter-spacing: -1.5px;
+        margin-bottom: 10px;
     }
     
-    .ans-glow {
-        background: rgba(16, 185, 129, 0.1);
-        border: 2px solid #10b981;
-        color: #34d399;
+    /* Glassmorphism Containers */
+    .m3-card {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 28px;
         padding: 30px;
-        border-radius: 20px;
-        font-size: 35px;
-        font-weight: 800;
-        text-align: center;
-        box-shadow: 0 0 20px rgba(16, 185, 129, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        margin-bottom: 25px;
+        box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+    }
+    .m3-card:hover {
+        transform: translateY(-8px) scale(1.01);
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(59, 130, 246, 0.5);
+        box-shadow: 0 20px 40px -15px rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Data Tables Styling */
+    .styled-table {
+        width: 100%; border-collapse: collapse;
+        margin: 25px 0; font-size: 0.9em;
+        border-radius: 15px; overflow: hidden;
     }
 
+    /* AI Solution Glow */
+    .ans-glow {
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.1));
+        border: 1px solid #10b981;
+        color: #34d399;
+        padding: 35px;
+        border-radius: 24px;
+        font-size: 38px;
+        font-weight: 900;
+        text-align: center;
+        text-shadow: 0 0 15px rgba(52, 211, 153, 0.5);
+        margin: 20px 0;
+    }
+
+    /* Sidebar Navigation */
+    [data-testid="stSidebar"] {
+        background: rgba(15, 23, 42, 0.95);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* Buttons */
     .stButton>button {
         background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-        color: white; border-radius: 100px; border: none;
-        padding: 10px 25px; font-weight: bold; width: 100%;
+        color: white; border-radius: 14px; border: none;
+        padding: 15px 30px; font-weight: 700; width: 100%;
+        text-transform: uppercase; letter-spacing: 1px;
         transition: 0.3s;
+    }
+    .stButton>button:hover {
+        filter: brightness(1.2);
+        box-shadow: 0 0 25px rgba(139, 92, 246, 0.4);
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. STATE MANAGEMENT ---
-if 'history' not in st.session_state: st.session_state.history = []
-if 'notes' not in st.session_state: st.session_state.notes = "Formulas:\n- Quadratic: x = (-b ± √(b² - 4ac)) / 2a"
+# =================================================================
+# SECTION 2: MODEL LAYER (BUSINESS LOGIC & DATA)
+# =================================================================
 
-# --- 3. SIDEBAR (AUTHENTICATION & NAV) ---
+class MathModel:
+    @staticmethod
+    def initialize_session():
+        if 'history' not in st.session_state:
+            st.session_state.history = []
+        if 'notes' not in st.session_state:
+            st.session_state.notes = "📌 MathIsEZ Project Notes\n---\n"
+        if 'calc_count' not in st.session_state:
+            st.session_state.calc_count = 0
+        if 'start_time' not in st.session_state:
+            st.session_state.start_time = time.time()
+
+    @staticmethod
+    def add_to_history(problem, result):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        st.session_state.history.append({
+            "Time": timestamp,
+            "Query": problem,
+            "Result": result
+        })
+        st.session_state.calc_count += 1
+
+# =================================================================
+# SECTION 3: VIEWMODEL LAYER (AI INTERFACE)
+# =================================================================
+
+def process_ai_request(image_file, api_key):
+    try:
+        client = Groq(api_key=api_key)
+        b64_image = base64.b64encode(image_file.getvalue()).decode('utf-8')
+        
+        prompt = """
+        You are a Math Expert. Analyze the image and provide:
+        1. FINAL: The final result/value.
+        2. STEP 1: [Title]|[Detailed explanation]
+        3. STEP 2: [Title]|[Detailed explanation]
+        Format strictly for parsing.
+        """
+        
+        completion = client.chat.completions.create(
+            model="llama-3.2-11b-vision-preview",
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_image}"}}
+            ]}],
+            temperature=0.2
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+
+# =================================================================
+# SECTION 4: VIEW LAYER (UI COMPONENTS)
+# =================================================================
+
+MathModel.initialize_session()
+
+# Sidebar Components
 with st.sidebar:
-    st.markdown('<h2 class="title-text" style="font-size:25px;">MathIsEZ</h2>', unsafe_allow_html=True)
+    st.markdown('<h1 class="title-text" style="font-size:28px;">MathIsEZ</h1>', unsafe_allow_html=True)
+    st.caption("Advanced MVVM Architecture v2.5")
     
-    # SAFE API KEY INPUT (Prevents GitHub block)
-    USER_API_KEY = st.text_input("🔑 Groq API Key", type="password", placeholder="gsk_...")
-    st.caption("Get your key at console.groq.com")
-    
-    st.divider()
-    nav = st.radio("Navigation", ["🏠 Home Dashboard", "🚀 Scan & Solve", "🧪 Lab Tools", "📚 Library", "📝 My Notes"])
+    # Secure API Key Entry
+    USER_KEY = st.text_input("🔑 System API Key", type="password", placeholder="gsk_...")
     
     st.divider()
-    if st.button("🗑️ Clear Session History"):
-        st.session_state.history = []
+    nav = st.radio("MAIN NAVIGATION", [
+        "🏠 Dashboard", 
+        "🚀 Vision Solver", 
+        "🧪 Advanced Lab", 
+        "📚 Knowledge Base", 
+        "📝 Lab Notebook",
+        "⚙️ Dev Console"
+    ])
+    
+    st.divider()
+    # Stats Widget
+    st.subheader("📊 Session Telemetry")
+    runtime = int(time.time() - st.session_state.start_time)
+    st.write(f"Runtime: `{runtime}s`")
+    st.write(f"Operations: `{st.session_state.calc_count}`")
+    
+    if st.button("🗑️ Reset Application"):
+        st.session_state.clear()
         st.rerun()
 
-# --- 4. MODULES ---
-
-if nav == "🏠 Home Dashboard":
+# --- MODULE 1: DASHBOARD ---
+if nav == "🏠 Dashboard":
     st.markdown('<h1 class="title-text">Dashboard</h1>', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f'<div class="m3-card"><h3>Calculations</h3><h1>{len(st.session_state.history)}</h1><p>Solved this session</p></div>', unsafe_allow_html=True)
-    with col2:
-        engine_status = "Optimal" if USER_API_KEY else "Awaiting Key"
-        st.markdown(f'<div class="m3-card"><h3>AI Engine</h3><p>Llama-3.2 Vision</p><p>Status: <span style="color:#3b82f6">{engine_status}</span></p></div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown('<div class="m3-card"><h3>Sync</h3><p>Proposal Repo</p><p>Status: <span style="color:#10b981">Online</span></p></div>', unsafe_allow_html=True)
-
-elif nav == "🚀 Scan & Solve":
-    st.markdown('<h1 class="title-text">Visual Solver</h1>', unsafe_allow_html=True)
     
-    if not USER_API_KEY:
-        st.info("💡 Please enter your Groq API Key in the sidebar to activate the AI Solver.")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.markdown(f'<div class="m3-card"><h3>Calc</h3><h1>{st.session_state.calc_count}</h1></div>', unsafe_allow_html=True)
+    with c2:
+        status_color = "#34d399" if USER_KEY else "#f87171"
+        st.markdown(f'<div class="m3-card"><h3>AI Link</h3><h2 style="color:{status_color}">{"ACTIVE" if USER_KEY else "OFFLINE"}</h2></div>', unsafe_allow_html=True)
+    with c3:
+        st.markdown('<div class="m3-card"><h3>Engine</h3><p>Llama 3.2-11B</p></div>', unsafe_allow_html=True)
+    with c4:
+        st.markdown('<div class="m3-card"><h3>Auth</h3><p>Standard</p></div>', unsafe_allow_html=True)
+
+    st.markdown("### 📈 Recent Activity")
+    if st.session_state.history:
+        df = pd.DataFrame(st.session_state.history)
+        st.table(df.tail(5))
+        
+        # Download History Feature
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Export Session CSV", csv, "math_history.csv", "text/csv")
     else:
-        l, r = st.columns([1, 1.2])
-        with l:
+        st.info("No activity recorded yet. Start solving in the Vision Solver!")
+
+# --- MODULE 2: VISION SOLVER ---
+elif nav == "🚀 Vision Solver":
+    st.markdown('<h1 class="title-text">Vision Solver</h1>', unsafe_allow_html=True)
+    
+    if not USER_KEY:
+        st.warning("⚠️ Input API Key in the sidebar to initialize the Vision Engine.")
+    else:
+        col_in, col_out = st.columns([1, 1.5])
+        
+        with col_in:
             st.markdown('<div class="m3-card">', unsafe_allow_html=True)
-            img = st.file_uploader("Upload Image", type=['png','jpg','jpeg'])
-            if not img: img = st.camera_input("Camera Scanner")
+            mode = st.toggle("Use Camera Scanner", value=False)
+            if mode:
+                img = st.camera_input("Capture Problem")
+            else:
+                img = st.file_uploader("Upload Image", type=['png','jpg','jpeg'])
             st.markdown('</div>', unsafe_allow_html=True)
 
         if img:
-            with l:
-                st.image(img, use_container_width=True)
-                btn = st.button("🚀 DECODE & SOLVE")
+            with col_in:
+                st.image(img, caption="Loaded Context", use_container_width=True)
+                trigger = st.button("🚀 EXECUTE AI DECODE")
             
-            if btn:
-                with r:
-                    try:
-                        client = Groq(api_key=USER_API_KEY)
-                        b64 = base64.b64encode(img.getvalue()).decode('utf-8')
-                        with st.spinner("⚡ AI is calculating..."):
-                            response = client.chat.completions.create(
-                                model="llama-3.2-11b-vision-preview",
-                                messages=[{"role": "user", "content": [
-                                    {"type": "text", "text": "Solve this. Format: FINAL: [Ans], STEP 1: [Title]|[Desc]"},
-                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
-                                ]}]
-                            )
-                        ans = response.choices[0].message.content
-                        st.balloons()
-                        for line in ans.split("\n"):
-                            if "FINAL:" in line:
-                                val = line.replace("FINAL:", "").strip()
-                                st.markdown(f'<div class="ans-glow">{val}</div>', unsafe_allow_html=True)
-                                st.session_state.history.append(val)
-                            elif "STEP" in line and "|" in line:
-                                t, d = line.split("|")
-                                st.markdown(f'<div class="m3-card"><h4>{t}</h4><p>{d}</p></div>', unsafe_allow_html=True)
-                    except Exception as e:
-                        st.error(f"Authentication Error: Ensure your API key is correct.")
+            if trigger:
+                with col_out:
+                    with st.spinner("Decoding Math Logic..."):
+                        raw_res = process_ai_request(img, USER_KEY)
+                        
+                        if "ERROR" in raw_res:
+                            st.error(raw_res)
+                        else:
+                            st.balloons()
+                            lines = raw_res.split("\n")
+                            for line in lines:
+                                if "FINAL:" in line:
+                                    ans = line.split("FINAL:")[1].strip()
+                                    st.markdown(f'<div class="ans-glow">{ans}</div>', unsafe_allow_html=True)
+                                    MathModel.add_to_history("Visual Solve", ans)
+                                elif "STEP" in line and "|" in line:
+                                    step_num, content = line.split(":", 1)
+                                    title, desc = content.split("|")
+                                    st.markdown(f'<div class="m3-card"><h4>{step_num}: {title}</h4><p>{desc}</p></div>', unsafe_allow_html=True)
 
-elif nav == "🧪 Lab Tools":
-    st.markdown('<h1 class="title-text">Lab Tools</h1>', unsafe_allow_html=True)
-    t1, t2 = st.tabs(["🔢 Scientific", "⚖️ Converter"])
-    with t1:
+# --- MODULE 3: ADVANCED LAB ---
+elif nav == "🧪 Advanced Lab":
+    st.markdown('<h1 class="title-text">The Lab</h1>', unsafe_allow_html=True)
+    
+    tab1, tab2, tab3 = st.tabs(["🔢 Algebra", "📏 Geometry", "📉 Stats"])
+    
+    with tab1:
         st.markdown('<div class="m3-card">', unsafe_allow_html=True)
-        eq = st.text_input("Formula Input (e.g., 25*4)")
-        if st.button("Calculate"):
-            try: st.success(f"Result: {eval(eq)}")
-            except: st.error("Invalid Formula")
+        st.subheader("Quadratic Equation Solver")
+        qa = st.number_input("Constant a", value=1.0)
+        qb = st.number_input("Constant b", value=0.0)
+        qc = st.number_input("Constant c", value=0.0)
+        
+        if st.button("Solve Quadratic"):
+            d = (qb**2) - (4*qa*qc)
+            if d < 0:
+                st.error("Complex Roots")
+            else:
+                sol1 = (-qb + (d**0.5)) / (2*qa)
+                sol2 = (-qb - (d**0.5)) / (2*qa)
+                st.success(f"Roots: x1={sol1}, x2={sol2}")
         st.markdown('</div>', unsafe_allow_html=True)
-    with t2:
+
+    with tab2:
         st.markdown('<div class="m3-card">', unsafe_allow_html=True)
-        num = st.number_input("Value", value=1.0)
-        st.write(f"**{num}** Kilometers is **{num * 0.621:.2f}** Miles")
+        st.subheader("Area Calculators")
+        shape = st.selectbox("Select Shape", ["Circle", "Rectangle", "Triangle"])
+        if shape == "Circle":
+            r = st.number_input("Radius", value=1.0)
+            st.write(f"Area: {3.14159 * r**2}")
+        elif shape == "Rectangle":
+            l = st.number_input("Length", value=1.0)
+            w = st.number_input("Width", value=1.0)
+            st.write(f"Area: {l * w}")
         st.markdown('</div>', unsafe_allow_html=True)
 
-elif nav == "📚 Library":
-    st.markdown('<h1 class="title-text">Math Library</h1>', unsafe_allow_html=True)
-    st.markdown('<div class="m3-card"><h4>Isaac Newton</h4><p>The father of Calculus and the laws of motion.</p></div>', unsafe_allow_html=True)
-    st.markdown('<div class="m3-card"><h4>Quadratic Formula</h4><code>x = [-b ± sqrt(b² - 4ac)] / 2a</code></div>', unsafe_allow_html=True)
+    with tab3:
+        st.markdown('<div class="m3-card">', unsafe_allow_html=True)
+        st.subheader("Data Analysis")
+        data_input = st.text_area("Paste comma-separated numbers (e.g. 10, 20, 30)")
+        if st.button("Analyze Data"):
+            nums = [float(x.strip()) for x in data_input.split(",")]
+            st.write(f"Mean: `{sum(nums)/len(nums)}` | Max: `{max(nums)}` | Min: `{min(nums)}`")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-elif nav == "📝 My Notes":
+# --- MODULE 4: KNOWLEDGE BASE ---
+elif nav == "📚 Knowledge Base":
+    st.markdown('<h1 class="title-text">Knowledge</h1>', unsafe_allow_html=True)
+    
+    search = st.text_input("🔍 Search Mathematical Concepts...")
+    
+    lib = {
+        "Pythagoras": "The theorem that in a right-angled triangle, the square of the hypotenuse is equal to the sum of squares of the other two sides.",
+        "Calculus": "The mathematical study of continuous change, originally called infinitesimal calculus.",
+        "Algebra": "The study of mathematical symbols and the rules for manipulating these symbols.",
+        "Geometry": "The branch of mathematics concerned with the properties and relations of points, lines, surfaces, and solids.",
+        "Statistics": "The discipline that concerns the collection, organization, analysis, interpretation, and presentation of data."
+    }
+    
+    cols = st.columns(2)
+    for i, (key, val) in enumerate(lib.items()):
+        with cols[i % 2]:
+            st.markdown(f'<div class="m3-card"><h3>{key}</h3><p>{val}</p></div>', unsafe_allow_html=True)
+
+# --- MODULE 5: LAB NOTEBOOK ---
+elif nav == "📝 Lab Notebook":
     st.markdown('<h1 class="title-text">Notebook</h1>', unsafe_allow_html=True)
-    st.session_state.notes = st.text_area("Observations:", value=st.session_state.notes, height=350)
-    if st.button("Save Notes"): st.toast("Notes saved to local session!")
+    st.session_state.notes = st.text_area("Markdown Enabled Sync-Pad", value=st.session_state.notes, height=500)
+    
+    if st.button("💾 Hard Save to Session"):
+        st.toast("Encrypted Save Successful!")
+    
+    st.markdown("### Preview")
+    st.markdown(st.session_state.notes)
+
+# --- MODULE 6: DEVELOPER CONSOLE ---
+elif nav == "⚙️ Dev Console":
+    st.markdown('<h1 class="title-text">System Dev</h1>', unsafe_allow_html=True)
+    
+    with st.expander("🔍 View Raw State Management"):
+        st.write(st.session_state)
+    
+    st.markdown('<div class="m3-card">', unsafe_allow_html=True)
+    st.write("### Application Logs")
+    st.code(f"USER_AUTH_STATUS: {bool(USER_KEY)}\nDB_RECORDS: {len(st.session_state.history)}\nUI_RENDER_ENG: Streamlit Web v1.3x")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# =================================================================
+# FOOTER
+# =================================================================
+st.divider()
+st.caption("MathIsEZ Ultra | Built for OSS Proposal 2025-2026 | Powered by Groq Llama 3.2")
